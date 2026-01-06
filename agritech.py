@@ -15,19 +15,19 @@ SHEET_URLS = {
 
 @st.cache_data # 데이터를 매번 새로고침하지 않도록 캐싱
 def load_data(url):
-    return pd.read_csv(url)
+    df = pd.read_csv(url)
+    # 숫자가 아닌 데이터(pcs 등)를 NaN으로 바꾸고 삭제하는 로직을 여기에 넣습니다.
+    df['Yield_Per_sqm_kg'] = pd.to_numeric(df['Yield_Per_sqm_kg'], errors='coerce')
+    df['Avg_Price_Per_kg_USD'] = pd.to_numeric(df['Avg_Price_Per_kg_USD'], errors='coerce')
+    df = df.dropna(subset=['Yield_Per_sqm_kg', 'Avg_Price_Per_kg_USD'])
+    return df
 
-# 1. 숫자가 들어있어야 할 컬럼들을 '숫자형'으로 강제 변환합니다.
-# errors='coerce'를 쓰면 숫자가 아닌 것(예: "pcs")은 자동으로 NaN(비어있는 값)이 됩니다.
-df_crop['Yield_Per_sqm_kg'] = pd.to_numeric(df_crop['Yield_Per_sqm_kg'], errors='coerce')
-df_crop['Avg_Price_Per_kg_USD'] = pd.to_numeric(df_crop['Avg_Price_Per_kg_USD'], errors='coerce')
-
-# 2. NaN이 발생한 행(계산이 불가능한 행)을 아예 삭제해버립니다.
-# subset에 지정한 컬럼들 중 하나라도 숫자가 아니면 그 행은 사라집니다.
-df_crop = df_crop.dropna(subset=['Yield_Per_sqm_kg', 'Avg_Price_Per_kg_USD'])
-
-# 삭제된 후의 데이터 개수를 로그로 확인합니다. 
-st.write(f"유효한 데이터 {len(df_crop)}건을 분석합니다.")
+# 실제 데이터를 불러올 때는 이렇게 호출합니다
+try:
+    df_crop = load_data(SHEET_URLS["crop"])
+    st.success(f"✅ {len(df_crop)}개의 유효한 데이터를 불러왔습니다.")
+except Exception as e:
+    st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
 
 # --- 앱 UI 시작 ---
 st.set_page_config(page_title="AgriTech FarmPlanner", layout="wide")
