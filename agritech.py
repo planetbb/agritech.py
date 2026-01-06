@@ -26,8 +26,8 @@ df_crop['Avg_Price_Per_kg_USD'] = pd.to_numeric(df_crop['Avg_Price_Per_kg_USD'],
 # subset에 지정한 컬럼들 중 하나라도 숫자가 아니면 그 행은 사라집니다.
 df_crop = df_crop.dropna(subset=['Yield_Per_sqm_kg', 'Avg_Price_Per_kg_USD'])
 
-# (선택사항) 삭제된 후의 데이터 개수를 로그로 확인하고 싶다면
-# st.write(f"유효한 데이터 {len(df_crop)}건을 분석합니다.")
+# 삭제된 후의 데이터 개수를 로그로 확인합니다. 
+st.write(f"유효한 데이터 {len(df_crop)}건을 분석합니다.")
 
 # --- 앱 UI 시작 ---
 st.set_page_config(page_title="AgriTech FarmPlanner", layout="wide")
