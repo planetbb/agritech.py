@@ -15,7 +15,6 @@ SHEET_URLS = {
 @st.cache_data
 def load_data(url, data_type="crop"):
     df = pd.read_csv(url)
-    # 컬럼명 앞뒤 공백 제거 (안전장치)
     df.columns = df.columns.str.strip()
     
     if data_type == "crop":
@@ -27,7 +26,6 @@ def load_data(url, data_type="crop"):
         for col in ['Auto_1_ManHour_per_sqm', 'Auto_2_ManHour_per_sqm', 'Auto_3_ManHour_per_sqm']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    
     return df
 
 # --- 메인 실행부 ---
@@ -42,65 +40,85 @@ except Exception as e:
     st.error(f"데이터 로딩 중 에러 발생: {e}")
     st.stop()
 
-# 사이드바 입력
+# --- 사이드바: 입력 인터페이스 ---
 with st.sidebar:
-    st.header("📍 농지 정보 입력")
-    # Crop_Master의 컬럼명인 'Category'를 사용합니다.
-    farm_type = st.selectbox("농지 형태 선택", df_crop['Category'].unique())
-    size_sqm = st.number_input("농지 면적 (sqm)", min_value=10, value=1000)
-    auto_level = st.select_slider("자동화 수준 선택", options=[1, 2, 3])
+    st.header("📍 농업 설정 (Farm Setup)")
+    
+    # 1. 국가 선택
+    selected_country = st.selectbox("1) 국가 선택 (Country)", df_crop['Country'].unique())
+    
+    # 2. 선택된 국가에 해당하는 작물만 필터링하여 선택
+    country_crops = df_crop[df_crop['Country'] == selected_country]
+    selected_crop = st.selectbox("2) 작물 선택 (Crop)", country_crops['Crop_Name'].unique())
+    
+    # 3. 농지 면적
+    size_sqm = st.number_input("3) 농지 면적 (Area, sqm)", min_value=10, value=1000, step=100)
+    
+    # 4. 자동화 수준 (Label -> Value 매핑)
+    auto_mapping = {"1) Manual": 1, "2) Semi-Auto": 2, "3) Full-Auto": 3}
+    auto_label = st.radio("4) 자동화 수준 (Automation)", list(auto_mapping.keys()))
+    auto_level = auto_mapping[auto_label]
 
 # 메인 탭
-tab1, tab2, tab3, tab4 = st.tabs(["🌱 추천", "🗓️ 스케줄러", "🚜 장비정보", "📊 데이터뷰"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 수익성 분석", "📅 작업 스케줄", "🚜 투입 장비", "🗂️ 마스터 데이터"])
 
-# --- Tab 1: 추천 ---
+# 선택된 작물의 상세 데이터 추출
+crop_data = df_crop[df_crop['Crop_Name'] == selected_crop].iloc[0]
+
+# --- Tab 1: 수익성 분석 (FarmPlanner) ---
 with tab1:
-    st.subheader(f"🔍 {farm_type} 환경 추천 작물")
-    # 'Category' 컬럼으로 필터링
-    recommended_crops = df_crop[df_crop['Category'] == farm_type]
+    st.subheader(f"📊 {selected_crop} 재배 수익 시뮬레이션")
+    col1, col2, col3 = st.columns(3)
     
-    if recommended_crops.empty:
-        st.info("해당 카테고리에 데이터가 없습니다.")
-    else:
-        for _, row in recommended_crops.iterrows():
-            with st.expander(f"📌 {row['Crop_Name']}"):
-                col1, col2 = st.columns(2)
-                revenue = row['Yield_Per_sqm_kg'] * size_sqm * row['Avg_Price_Per_kg_USD']
-                col1.metric("예상 매출", f"${revenue:,.0f}")
-                col2.metric("지역", row['Country'])
+    revenue = crop_data['Yield_Per_sqm_kg'] * size_sqm * crop_data['Avg_Price_Per_kg_USD']
+    total_yield = crop_data['Yield_Per_sqm_kg'] * size_sqm
+    
+    col1.metric("예상 총 매출", f"${revenue:,.0f}")
+    col2.metric("예상 총 수확량", f"{total_yield:,.0f} kg")
+    col3.metric("재배 카테고리", crop_data['Category'])
+    
+    st.info(f"💡 {selected_country} 지역의 {selected_crop} 평균 지표를 바탕으로 산출되었습니다.")
 
-# --- Tab 2: 스케줄러 ---
+# --- Tab 2: 작업 스케줄 (FarmScheduler) ---
 with tab2:
-    if not recommended_crops.empty:
-        selected_crop = st.selectbox("작물 선택", recommended_crops['Crop_Name'].unique())
-        crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
+    st.subheader(f"📅 {selected_crop} 연간 공정 스케줄 ({auto_label})")
+    crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
+    
+    if not crop_schedule.empty:
+        # 컬럼 정리
+        show_cols = ['Process_Step', 'Work_Week_Start', 'Work_Week_End', f'Auto_{auto_level}_ManHour_per_sqm']
+        if auto_level >= 2:
+            equip_col = f'Auto_{auto_level}_Equipment'
+            if equip_col in crop_schedule.columns:
+                show_cols.insert(1, equip_col)
         
-        if not crop_schedule.empty:
-            show_cols = ['Process_Step', 'Work_Week_Start', 'Work_Week_End', f'Auto_{auto_level}_ManHour_per_sqm']
-            if auto_level >= 2:
-                equip_col = f'Auto_{auto_level}_Equipment'
-                if equip_col in crop_schedule.columns:
-                    show_cols.insert(1, equip_col)
-            st.dataframe(crop_schedule[show_cols], use_container_width=True)
-            
-            total_h = crop_schedule[f'Auto_{auto_level}_ManHour_per_sqm'].sum() * size_sqm
-            st.warning(f"💡 연간 총 예상 노동시간: {total_h:,.1f} Man-Hour")
-
-# --- Tab 3: 장비정보 ---
-with tab3:
-    if auto_level > 1 and not recommended_crops.empty:
-        equip_names = df_process[df_process['Crop_Name'] == selected_crop][f'Auto_{auto_level}_Equipment'].unique()
-        matched = df_equip[df_equip['Item_Name'].isin(equip_names)]
-        if not matched.empty:
-            st.table(matched[['Item_Name', 'Unit_Price_USD', 'Operating_Cost_Hour_USD']])
-        else:
-            st.info("장비 마스터 정보가 없습니다.")
+        st.dataframe(crop_schedule[show_cols], use_container_width=True)
+        
+        # 총 노동 시간 계산
+        total_h = crop_schedule[f'Auto_{auto_level}_ManHour_per_sqm'].sum() * size_sqm
+        st.warning(f"⚠️ {auto_label} 적용 시, 연간 총 예상 노동시간: **{total_h:,.1f} Man-Hour**")
     else:
-        st.write("자동화 레벨 1은 장비 정보가 표시되지 않습니다.")
+        st.error("해당 작물의 공정(Process) 데이터가 없습니다. 시트를 확인해주세요.")
 
-# --- Tab 4: 데이터뷰 ---
+# --- Tab 3: 투입 장비 상세 ---
+with tab3:
+    st.subheader(f"🚜 {auto_label} 단계 필수 장비/시설")
+    if auto_level > 1:
+        # 스케줄에 포함된 장비 이름 추출
+        equip_names = crop_schedule[f'Auto_{auto_level}_Equipment'].unique()
+        matched = df_equip[df_equip['Item_Name'].isin(equip_names)]
+        
+        if not matched.empty:
+            st.write("선택하신 자동화 수준에서 운용되는 장비 상세 명세입니다.")
+            st.table(matched[['Item_Name', 'Unit_Price_USD', 'Operating_Cost_Hour_USD', 'Lifespan_Years']])
+        else:
+            st.info("현재 선택된 공정에 매칭된 장비 마스터 정보가 없습니다.")
+    else:
+        st.write("Manual 단계는 별도의 대형 자동화 장비를 사용하지 않습니다.")
+
+# --- Tab 4: 마스터 데이터 ---
 with tab4:
-    choice = st.radio("시트 선택", ["작물", "공정", "장비"], horizontal=True)
-    if choice == "작물": st.dataframe(df_crop)
-    elif choice == "공정": st.dataframe(df_process)
+    choice = st.radio("조회할 데이터", ["작물 마스터", "공정 표준", "장비 시설"], horizontal=True)
+    if choice == "작물 마스터": st.dataframe(df_crop)
+    elif choice == "공정 표준": st.dataframe(df_process)
     else: st.dataframe(df_equip)
