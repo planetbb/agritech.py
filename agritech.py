@@ -17,6 +17,18 @@ SHEET_URLS = {
 def load_data(url):
     return pd.read_csv(url)
 
+# 1. 숫자가 들어있어야 할 컬럼들을 '숫자형'으로 강제 변환합니다.
+# errors='coerce'를 쓰면 숫자가 아닌 것(예: "pcs")은 자동으로 NaN(비어있는 값)이 됩니다.
+df_crop['Yield_Per_sqm_kg'] = pd.to_numeric(df_crop['Yield_Per_sqm_kg'], errors='coerce')
+df_crop['Avg_Price_Per_kg_USD'] = pd.to_numeric(df_crop['Avg_Price_Per_kg_USD'], errors='coerce')
+
+# 2. NaN이 발생한 행(계산이 불가능한 행)을 아예 삭제해버립니다.
+# subset에 지정한 컬럼들 중 하나라도 숫자가 아니면 그 행은 사라집니다.
+df_crop = df_crop.dropna(subset=['Yield_Per_sqm_kg', 'Avg_Price_Per_kg_USD'])
+
+# (선택사항) 삭제된 후의 데이터 개수를 로그로 확인하고 싶다면
+# st.write(f"유효한 데이터 {len(df_crop)}건을 분석합니다.")
+
 # --- 앱 UI 시작 ---
 st.set_page_config(page_title="AgriTech FarmPlanner", layout="wide")
 st.title("🌱 AgriTech FarmPlanner & Scheduler")
