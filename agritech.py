@@ -183,12 +183,50 @@ with tab1:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    with right_col:
+with right_col:
         st.write("#### 📋 레벨별 요약 및 인사이트")
         for _, r in df_comp.iterrows():
             sel = (r['Level'] == automation_level)
             bg_color = "#FFF9C4" if sel else "#FFFFFF"
             border_color = "#FBC02D" if sel else "#DDD"
             
+            # f-string 가독성을 위해 변수로 분리 후 대입
+            level_name = r['Level']
+            star = "⭐" if sel else ""
+            mh_val = f"{r['MH']:,.1f}"
+            capex_val = f"{r['CAPEX']:,.0f}"
+            
             st.markdown(f"""
-                <div style="border:
+                <div style="border: 2px solid {border_color}; padding: 10px; border-radius: 8px; margin-bottom: 6px; background-color: {bg_color}; color: #000;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 800; font-size: 1em;">{level_name} {star}</span>
+                        <span style="font-size: 0.9em; font-weight: 700;">⏱️ {mh_val}h | 💰 ${capex_val}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True) # 따옴표와 괄호 위치 확인
+
+        st.markdown("<div style='margin-top: 15px;'></div>", unsafe_allow_html=True)
+        
+        # 선택된 레벨 상세 분석
+        if automation_level != "Manual":
+            manual_data = df_comp.iloc[0]
+            current_data = df_comp[df_comp['Level'] == automation_level].iloc[0]
+            reduction_pct = (1 - current_data['MH'] / manual_data['MH']) * 100 if manual_data['MH'] > 0 else 0
+            extra_capex = current_data['CAPEX'] - manual_data['CAPEX']
+            
+            # 변수 사전 정의로 f-string 오류 방지
+            pct_text = f"{reduction_pct:.1f}%"
+            extra_text = f"$ {extra_capex:,.0f}"
+            
+            st.markdown(f"""
+                <div style="background-color: #F8F9F9; border-left: 5px solid #28B463; padding: 15px; border-radius: 5px;">
+                    <h5 style="margin-top:0; color: #1D8348;">💡 {automation_level} 성과 분석</h5>
+                    <p style="margin: 5px 0; font-size: 0.95em; color: #000;">
+                        <b>노동 시간:</b> 수동 대비 <span style="color: #28B463; font-weight:bold;">{pct_text} 절감</span><br>
+                        <b>투자 비용:</b> 수동 대비 <span style="color: #CB4335; font-weight:bold;">{extra_text} 추가</span>
+                    </p>
+                    <small style="color: #7B7D7D;">* {source_name} 데이터 기준</small>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("💡 **Manual 모드 사용 중**\n\n상단에서 자동화 수준을 변경하여 효율성을 비교해 보세요.")
