@@ -65,34 +65,27 @@ with tab1:
 
     st.header(f"📊 {selected_crop} 자동화 레벨별 비교 분석")
     
+    # 1. 데이터 계산부
     comparison_data = []
     crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
-    
     levels = ["Manual", "Semi-Auto", "Full-Auto"]
+    
     for i, label in enumerate(levels):
         level_num = i + 1
-        mh_col = f'Auto_{level_num}_ManHour_per_sqm'
-        eq_col = f'Auto_{level_num}_Equipment'
+        mh_col, eq_col = f'Auto_{level_num}_ManHour_per_sqm', f'Auto_{level_num}_Equipment'
         
-        # 데이터가 없으면 0으로 처리
-        try:
-            total_mh = crop_schedule[mh_col].sum() * size_sqm if mh_col in crop_schedule.columns else 0
-        except:
-            total_mh = 0
-            
+        # 노동시간 계산
+        total_mh = crop_schedule[mh_col].sum() * size_sqm if mh_col in crop_schedule.columns else 0
+        
+        # 투자비 계산
         total_capex = 0
         used_equips = []
         if eq_col in crop_schedule.columns:
             used_equips = crop_schedule[eq_col].dropna().unique().tolist()
-            if level_num == 1 and not used_equips:
-                used_equips = ['Hand Tool Kit']
-            
+            if level_num == 1 and not used_equips: used_equips = ['Hand Tool Kit']
             if not df_equip.empty:
-                # 'Unit_Price_USD' 컬럼 확인 후 계산
-                p_col = 'Unit_Price_USD'
-                if p_col in df_equip.columns:
-                    prices = pd.to_numeric(df_equip[df_equip['Item_Name'].isin(used_equips)][p_col], errors='coerce')
-                    total_capex = prices.sum()
+                prices = pd.to_numeric(df_equip[df_equip['Item_Name'].isin(used_equips)]['Unit_Price_USD'], errors='coerce')
+                total_capex = prices.sum()
         
         comparison_data.append({
             "Level": label,
@@ -103,51 +96,61 @@ with tab1:
 
     df_compare = pd.DataFrame(comparison_data)
 
-    # 1. 그래프 시각화
+    # 2. 상단 그래프 (기존 유지)
     fig = go.Figure()
     fig.add_trace(go.Bar(x=df_compare['Level'], y=df_compare['Total_ManHour'], name='Man-Hours', marker_color='#5dade2', yaxis='y1'))
     fig.add_trace(go.Scatter(x=df_compare['Level'], y=df_compare['Total_CAPEX'], name='Investment ($)', line=dict(color='#e74c3c', width=4), yaxis='y2'))
     fig.update_layout(
         yaxis=dict(title="Man-Hours", side="left"), 
         yaxis2=dict(title="Investment ($)", overlaying="y", side="right", showgrid=False),
-        legend=dict(orientation="h", y=1.1)
+        legend=dict(orientation="h", y=1.1),
+        margin=dict(l=0, r=0, t=30, b=0)
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # 2. 통합 상세 분석 표 (에러 수정 및 하이라이트)
+    # 3. 상세 분석 카드 레이아웃 (좌우 디스플레이)
     st.markdown("---")
-    st.subheader(f"📋 전 레벨 통합 비교 리포트")
+    st.subheader("📋 자동화 수준별 상세 비교")
     
-    # 표시용 데이터프레임 생성
-    df_display = df_compare.copy()
-    df_display.columns = ["자동화 수준", "총 노동 시간(hr)", "총 투자비(USD)", "투입 장비"]
+    # 세 개의 컬럼 생성
+    cols = st.columns(3)
+    
+    for i, label in enumerate(levels):
+        data = df_compare.iloc[i]
+        is_selected = (label == automation_level)
+        
+        with cols[i]:
+            # 선택된 카드에만 연한 배경색과 테두리 적용 (HTML/CSS 사용)
+            bg_color = "#E8F4FD" if is_selected else "#FFFFFF"
+            border_color = "#3498DB" if is_selected else "#E0E0E0"
+            text_weight = "bold" if is_selected else "normal"
+            
+            st.markdown(f"""
+                <div style="
+                    background-color: {bg_color}; 
+                    border: 2px solid {border_color}; 
+                    padding: 20px; 
+                    border-radius: 10px;
+                    height: 250px;
+                    box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+                ">
+                    <h3 style="margin-top:0; color:#2C3E50;">{label} {"✅" if is_selected else ""}</h3>
+                    <p style="margin-bottom:5px;">⏱️ <b>노동 시간:</b> {data['Total_ManHour']:,.1f} hr</p>
+                    <p style="margin-bottom:5px;">💰 <b>설비 투자비:</b> $ {data['Total_CAPEX']:,.0f}</p>
+                    <hr style="margin: 10px 0; border: 0.5px solid #DDD;">
+                    <p style="font-size: 0.85em; color: #666; line-height: 1.4;">
+                        🛠️ <b>주요 장비:</b><br>{data['Equipment']}
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
 
-    # [핵심 수정] 하이라이트 함수가 변경된 컬럼명을 인식하도록 수정
-    def highlight_selected(row):
-        # 사이드바에서 선택한 automation_level은 "Manual" 형태의 문자열임
-        if row["자동화 수준"] == automation_level:
-            return ['background-color: #FFF4E6; font-weight: bold'] * len(row)
-        return [''] * len(row)
-
-    # 스타일 적용 및 출력
-    try:
-        styled_df = df_display.style.apply(highlight_selected, axis=1).format({
-            "총 노동 시간(hr)": "{:,.1f}",
-            "총 투자비(USD)": "$ {:,.0f}"
-        })
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-    except:
-        # 스타일 적용 에러 시 일반 표로 출력 (비상용)
-        st.table(df_display)
-
-    # 3. 추가 인사이트
+    # 4. 하단 성과 요약 메시지
     if automation_level != "Manual":
         m_mh = df_compare.iloc[0]['Total_ManHour']
         curr_mh = df_compare[df_compare['Level'] == automation_level]['Total_ManHour'].values[0]
         if m_mh > 0:
             reduction = (1 - curr_mh / m_mh) * 100
-            st.success(f"💡 **{automation_level}** 선택 시 수동 대비 **{reduction:.1f}%** 노동력이 절감됩니다.")
-            
+            st.success(f"💡 현재 선택하신 **{automation_level}**은 수동 작업 대비 약 **{reduction:.1f}%**의 노동력 절감 효과가 있습니다.")            
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
     st.subheader(f"📅 {selected_crop} ({automation_level}) 스케줄")
