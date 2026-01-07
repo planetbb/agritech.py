@@ -12,19 +12,30 @@ SHEET_URLS = {
     "process": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBlhAdJB-jJOr_MoBgELY-qNKC5yJcD-G2gL03WRVTdbfOqtdiq0jHOnA-UlPakXWjpOw8PeMUroLG/pub?gid=1120300035&single=true&output=csv"
 }
 
-# 3. 데이터 로딩 함수
+# 3. 데이터 로딩 및 전처리 함수 (강화 버전)
 @st.cache_data
 def load_data(url, data_type="crop"):
     try:
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
+        
         if data_type == "crop":
-            df['Yield_Per_sqm_kg'] = pd.to_numeric(df['Yield_Per_sqm_kg'], errors='coerce')
-            df['Avg_Price_Per_kg_USD'] = pd.to_numeric(df['Avg_Price_Per_kg_USD'], errors='coerce')
-        if data_type == "process":
+            df['Yield_Per_sqm_kg'] = pd.to_numeric(df['Yield_Per_sqm_kg'], errors='coerce').fillna(0)
+            df['Avg_Price_Per_kg_USD'] = pd.to_numeric(df['Avg_Price_Per_kg_USD'], errors='coerce').fillna(0)
+            
+        elif data_type == "process":
             for col in ['Auto_1_ManHour_per_sqm', 'Auto_2_ManHour_per_sqm', 'Auto_3_ManHour_per_sqm']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                    
+        elif data_type == "equipment":
+            # Unit_Price_USD 컬럼 강제 숫자 변환 및 결측치 0 처리
+            if 'Unit_Price_USD' in df.columns:
+                df['Unit_Price_USD'] = pd.to_numeric(df['Unit_Price_USD'], errors='coerce').fillna(0)
+            # Lifespan_Years 컬럼 강제 숫자 변환 및 결측치 1 처리
+            if 'Lifespan_Years' in df.columns:
+                df['Lifespan_Years'] = pd.to_numeric(df['Lifespan_Years'], errors='coerce').fillna(1)
+                
         return df
     except Exception as e:
         st.error(f"데이터 로드 실패: {e}")
@@ -49,169 +60,85 @@ with st.sidebar:
     auto_options = ["1) Manual", "2) Semi-Auto", "3) Full-Auto"]
     auto_label = st.radio("4) 자동화 수준 (Automation)", auto_options)
     
-    automation_level = auto_label.split(") ")[1]  # "Manual", "Semi-Auto", "Full-Auto"
-    auto_level_idx = auto_options.index(auto_label) + 1  # 1, 2, 3 (정수)
+    automation_level = auto_label.split(") ")[1]
+    auto_level_idx = auto_options.index(auto_label) + 1
 
-# --- Fallback 로직 핵심 데이터 준비 ---
-# 선택된 작물의 정보 조회 (Category_Type 포함)
+# --- Fallback 로직 데이터 준비 ---
 crop_info_row = df_crop[df_crop['Crop_Name'] == selected_crop].iloc[0]
 selected_category = crop_info_row['Category_Type']
 
-# 1. 특정 작물 전용 공정 데이터 검색
 display_process_df = df_process[df_process['Crop_Name'] == selected_crop]
-
-# 2. 전용 데이터가 없으면 Category_Type(표준 모델)으로 Fallback
 is_fallback = False
 if display_process_df.empty:
     display_process_df = df_process[df_process['Crop_Name'] == selected_category]
     is_fallback = True
 
-# 메인 탭 구성
+# 메인 탭
 tab1, tab2, tab3, tab4 = st.tabs(["📊 수익성 분석", "📅 작업 스케줄", "🚜 투입 장비", "🗂️ 마스터 데이터"])
 
-# --- Tab 1: 수익성 분석 ---
+# --- Tab 1: 수익성 분석 (생략 없이 포함) ---
 with tab1:
-    # 0. 기초 수익 지표 계산
     total_yield_kg = size_sqm * crop_info_row['Yield_Per_sqm_kg']
     total_revenue_usd = total_yield_kg * crop_info_row['Avg_Price_Per_kg_USD']
-
     st.markdown(f"### 📊 {selected_crop} 분석 리포트")
     m1, m2, m3 = st.columns(3)
     m1.metric("🌾 예상 수확량", f"{total_yield_kg:,.1f} kg")
     m2.metric("💰 예상 매출액", f"$ {total_revenue_usd:,.0f}")
     m3.metric("📍 설정 면적", f"{size_sqm:,.0f} sqm")
-
     st.markdown("---")
-
-    # 2. 레벨별 비교 데이터 계산 (Fallback 데이터 기반)
+    
     comparison_data = []
     levels = ["Manual", "Semi-Auto", "Full-Auto"]
-    
     for i, label in enumerate(levels):
-        level_num = i + 1
-        mh_col = f'Auto_{level_num}_ManHour_per_sqm'
-        eq_col = f'Auto_{level_num}_Equipment'
-        
-        total_mh = display_process_df[mh_col].sum() * size_sqm if mh_col in display_process_df.columns else 0
-        
-        total_capex = 0
-        used_equips = []
-        if eq_col in display_process_df.columns:
-            used_equips = display_process_df[eq_col].dropna().unique().tolist()
-            if level_num == 1 and not used_equips: used_equips = ['Hand Tool Kit']
-            if not df_equip.empty:
-                prices = pd.to_numeric(df_equip[df_equip['Item_Name'].isin(used_equips)]['Unit_Price_USD'], errors='coerce')
-                total_capex = prices.sum()
-        
-        comparison_data.append({"Level": label, "Total_ManHour": total_mh, "Total_CAPEX": total_capex, "Equipment": ", ".join(used_equips) if used_equips else "N/A"})
+        num = i + 1
+        mh_val = display_process_df[f'Auto_{num}_ManHour_per_sqm'].sum() * size_sqm
+        eq_list = display_process_df[f'Auto_{num}_Equipment'].dropna().unique().tolist()
+        capex = df_equip[df_equip['Item_Name'].isin(eq_list)]['Unit_Price_USD'].sum()
+        comparison_data.append({"Level": label, "Total_ManHour": mh_val, "Total_CAPEX": capex, "Equipment": ", ".join(eq_list)})
+    
     df_compare = pd.DataFrame(comparison_data)
-
-    # 3. 그래프와 카드 레이아웃 (가로 병렬 배치)
-    chart_col, info_col = st.columns([1, 1])
-
-    with chart_col:
-        st.write("#### 📈 효율성 비교 차트")
+    c_col, i_col = st.columns([1, 1])
+    with c_col:
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=df_compare['Level'], y=df_compare['Total_ManHour'], name='Man-Hours', marker_color='#5dade2', yaxis='y1'))
-        fig.add_trace(go.Scatter(x=df_compare['Level'], y=df_compare['Total_CAPEX'], name='Investment', line=dict(color='#e74c3c', width=3), yaxis='y2'))
-        fig.update_layout(
-            height=350,
-            margin=dict(l=0, r=0, t=20, b=0),
-            legend=dict(orientation="h", y=1.2),
-            yaxis=dict(title="Hrs"),
-            yaxis2=dict(overlaying="y", side="right", showgrid=False)
-        )
+        fig.add_trace(go.Bar(x=df_compare['Level'], y=df_compare['Total_ManHour'], name='Hrs', marker_color='#5dade2', yaxis='y1'))
+        fig.add_trace(go.Scatter(x=df_compare['Level'], y=df_compare['Total_CAPEX'], name='CAPEX', line=dict(color='#e74c3c', width=3), yaxis='y2'))
+        fig.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0), yaxis2=dict(overlaying="y", side="right", showgrid=False))
         st.plotly_chart(fig, use_container_width=True)
-
-    with info_col:
-        st.write("#### 📋 레벨별 상세 요약")
-        for i, label in enumerate(levels):
-            data = df_compare.iloc[i]
-            is_selected = (label == automation_level)
-            bg_color = "#F0F7FF" if is_selected else "#FFFFFF"
-            border_color = "#2E86C1" if is_selected else "#D5D8DC"
-            
-            st.markdown(f"""
-                <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; color: #000;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 900; font-size: 1.1em;">{label} {"✅" if is_selected else ""}</span>
-                        <span style="font-size: 0.85em; color: #555;">⏱️ {data['Total_ManHour']:,.1f} hr | 💰 $ {data['Total_CAPEX']:,.0f}</span>
-                    </div>
-                    <div style="font-size: 0.75em; color: #333; margin-top: 5px; border-top: 0.5px solid #EEE; padding-top: 3px;">
-                        <b>🚜 장비:</b> {data['Equipment']}
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-    # 4. 하단 성과 인사이트
-    if automation_level != "Manual":
-        manual_mh = df_compare.iloc[0]['Total_ManHour']
-        selected_mh = df_compare[df_compare['Level'] == automation_level]['Total_ManHour'].values[0]
-        extra_capex = df_compare[df_compare['Level'] == automation_level]['Total_CAPEX'].values[0] - df_compare.iloc[0]['Total_CAPEX']
-        
-        if manual_mh > 0:
-            reduction = (1 - selected_mh / manual_mh) * 100
-            st.info(f"""
-                💡 **{automation_level} 분석 결과:**
-                * **노동력 절감:** 수동 대비 약 **{reduction:.1f}%** ({manual_mh - selected_mh:,.1f}시간) 절감
-                * **추가 투자비:** 수동 대비 **$ {extra_capex:,.0f}** 추가 지출 필요
-            """)
+    with i_col:
+        for _, row in df_compare.iterrows():
+            sel = (row['Level'] == automation_level)
+            st.markdown(f"""<div style="border: 1px solid {'#2E86C1' if sel else '#DDD'}; padding: 10px; border-radius: 5px; margin-bottom: 5px; background: {'#F0F7FF' if sel else '#FFF'}; color: #000;">
+            <b>{row['Level']}</b> | ⏱️ {row['Total_ManHour']:,.1f}h | 💰 ${row['Total_CAPEX']:,.0f}<br><small>🚜 {row['Equipment']}</small></div>""", unsafe_allow_html=True)
 
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
-    st.subheader(f"📅 {selected_crop} 작업 프로세스")
-    if is_fallback:
-        st.warning(f"ℹ️ {selected_crop} 전용 데이터가 없어 **{selected_category}** 표준 공정을 표시합니다.")
-    
-    if not display_process_df.empty:
-        # 선택된 자동화 레벨에 맞는 장비 컬럼명 동적 생성
-        target_equip_col = f'Auto_{auto_level_idx}_Equipment'
-        
-        # 표시할 컬럼 설정 (Work_Week_Start/End가 있으면 포함)
-        cols_to_show = ['Process_Step']
-        for c in ['Work_Week_Start', 'Work_Week_End', target_equip_col]:
-            if c in display_process_df.columns:
-                cols_to_show.append(c)
-        
-        st.dataframe(display_process_df[cols_to_show], use_container_width=True, hide_index=True)
-    else:
-        st.error("표시할 공정 데이터가 없습니다.")
+    if is_fallback: st.warning(f"ℹ️ {selected_category} 표준 공정 데이터입니다.")
+    target_col = f'Auto_{auto_level_idx}_Equipment'
+    st.dataframe(display_process_df[['Process_Step', 'Work_Week_Start', 'Work_Week_End', target_col]], use_container_width=True, hide_index=True)
 
-# --- Tab 3: 투입 장비 명세 ---
+# --- Tab 3: 투입 장비 (에러 해결 핵심 지점) ---
 with tab3:
-    st.subheader(f"🚜 {automation_level} 레벨 투입 장비 상세")
+    st.subheader(f"🚜 {automation_level} 상세 장비 제원")
+    target_col = f'Auto_{auto_level_idx}_Equipment'
+    used_equips = display_process_df[target_col].dropna().unique()
+    matched_equip = df_equip[df_equip['Item_Name'].isin(used_equips)]
     
-    target_equip_col = f'Auto_{auto_level_idx}_Equipment'
-    if target_equip_col in display_process_df.columns:
-        used_equips = display_process_df[target_equip_col].dropna().unique()
-        
-        # 장비 마스터 데이터에서 정보 추출
-        matched_equip = df_equip[df_equip['Item_Name'].isin(used_equips)]
-        
-        if not matched_equip.empty:
-            # 카드 형태로 장비 정보 나열
-            for _, row in matched_equip.iterrows():
-                with st.expander(f"🔹 {row['Item_Name']} ({row['Category']})"):
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Unit Price", f"$ {row['Unit_Price_USD']:,.0f}")
-                    c2.metric("Lifespan", f"{row['Lifespan_Years']} Years")
-                    if 'Description' in row:
-                        c3.write(f"**Note:** {row['Description']}")
-            
-            st.markdown("---")
-            st.write("#### 📊 장비 요약 테이블")
-            st.dataframe(matched_equip, use_container_width=True, hide_index=True)
-        else:
-            st.info("등록된 상세 장비 제원이 없습니다. 마스터 데이터를 확인해주세요.")
-
-# --- Tab 4: 마스터 데이터 관리 ---
-with tab4:
-    st.header("🗂️ 데이터베이스 원본 확인")
-    choice = st.radio("조회할 데이터 선택", ["Crop Master", "Process Standard", "Equipment Facility"], horizontal=True)
-    
-    if choice == "Crop Master":
-        st.dataframe(df_crop, use_container_width=True)
-    elif choice == "Process Standard":
-        st.dataframe(df_process, use_container_width=True)
+    if not matched_equip.empty:
+        for _, row in matched_equip.iterrows():
+            with st.expander(f"🔹 {row['Item_Name']}"):
+                col1, col2 = st.columns(2)
+                # 에러 방지: 값을 float으로 명시적 변환 후 포맷팅
+                price = float(row['Unit_Price_USD'])
+                life = float(row['Lifespan_Years'])
+                col1.metric("Unit Price", f"$ {price:,.0f}")
+                col2.metric("Lifespan", f"{int(life)} Years")
+        st.dataframe(matched_equip, use_container_width=True, hide_index=True)
     else:
-        st.dataframe(df_equip, use_container_width=True)
+        st.info("매칭된 장비 정보가 없습니다.")
+
+# --- Tab 4: 마스터 데이터 ---
+with tab4:
+    choice = st.radio("원본 데이터", ["작물", "공정", "장비"], horizontal=True)
+    if choice == "작물": st.dataframe(df_crop)
+    elif choice == "공정": st.dataframe(df_process)
+    else: st.dataframe(df_equip)
