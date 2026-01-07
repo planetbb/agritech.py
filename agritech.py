@@ -75,7 +75,7 @@ with tab1:
     
     col1.metric("예상 총 매출", f"${revenue:,.0f}")
     col2.metric("예상 총 수확량", f"{total_yield:,.0f} kg")
-    col3.metric("재배 카테고리", crop_data['Category'])
+    col3.metric("재배 카테고리", crop_data['Category_Type'])
     
     st.info(f"💡 {selected_country} 지역의 {selected_crop} 평균 지표를 바탕으로 산출되었습니다.")
 
