@@ -137,14 +137,31 @@ with tab1:
                 </div>
             """, unsafe_allow_html=True)
 
-    # 4. 하단 성과 요약 (한 줄로 컴팩트하게)
+# 4. 하단 성과 요약 (절감 노동력 + 추가 투자비 분석)
     if automation_level != "Manual":
-        m_mh = df_compare.iloc[0]['Total_ManHour']
-        curr_mh = df_compare[df_compare['Level'] == automation_level]['Total_ManHour'].values[0]
+        # 수동(Manual) 데이터 가져오기
+        manual_data = df_compare.iloc[0]
+        selected_data = df_compare[df_compare['Level'] == automation_level].iloc[0]
+        
+        m_mh = manual_data['Total_ManHour']
+        curr_mh = selected_data['Total_ManHour']
+        
+        # 추가 투자비 계산 (현재 레벨 투자비 - 수동 레벨 투자비)
+        extra_capex = selected_data['Total_CAPEX'] - manual_data['Total_CAPEX']
+        
         if m_mh > 0:
             reduction = (1 - curr_mh / m_mh) * 100
-            st.info(f"💡 **{automation_level}** 도입 시 노동력 **{reduction:.1f}%** 절감 가능")
-
+            
+            # 메시지 구성
+            st.info(f"""
+                💡 **{automation_level} 분석 결과:**
+                * **노동력 절감:** 수동 대비 약 **{reduction:.1f}%** ({m_mh - curr_mh:,.1f}시간)를 줄일 수 있습니다.
+                * **추가 투자비:** 수동 대비 **$ {extra_capex:,.0f}**의 초기 비용이 더 필요합니다.
+                * **효율성:** 시간당 인건비를 고려하여 위 추가 투자비를 회수하는 기간을 검토해 보세요.
+            """)
+    else:
+        st.info("💡 **Manual 모드:** 가장 기본적인 수동 방식입니다. 상단 차트를 통해 자동화 시 절감 가능한 노동 시간을 확인해 보세요.")
+        
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
     st.subheader(f"📅 {selected_crop} ({automation_level}) 스케줄")
