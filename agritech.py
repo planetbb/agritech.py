@@ -82,23 +82,44 @@ with tab1:
 # --- Tab 2: 작업 스케줄 (FarmScheduler) ---
 with tab2:
     st.subheader(f"📅 {selected_crop} 연간 공정 스케줄 ({auto_label})")
-    crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
+    
+    # 해당 작물의 공정 데이터 필터링
+    crop_schedule = df_process[df_process['Crop_Name'] == selected_crop].copy() # .copy()를 써야 데이터 수정 시 경고가 안 납니다.
     
     if not crop_schedule.empty:
-        # 컬럼 정리
-        show_cols = ['Process_Step', 'Work_Week_Start', 'Work_Week_End', f'Auto_{auto_level}_ManHour_per_sqm']
-        if auto_level >= 2:
-            equip_col = f'Auto_{auto_level}_Equipment'
-            if equip_col in crop_schedule.columns:
-                show_cols.insert(1, equip_col)
+        # 1. 자동화 레벨 1(Manual)일 때 'Hand Tool Kit' 자동 매칭
+        equip_col = f'Auto_{auto_level}_Equipment'
+        mh_col = f'Auto_{auto_level}_ManHour_per_sqm'
         
-        st.dataframe(crop_schedule[show_cols], use_container_width=True)
+        if auto_level == 1:
+            # 시트에 컬럼이 없거나 비어있으면 'Hand Tool Kit'으로 채움
+            if equip_col not in crop_schedule.columns:
+                crop_schedule[equip_col] = "Hand Tool Kit"
+            crop_schedule[equip_col] = crop_schedule[equip_col].fillna("Hand Tool Kit")
+
+        # 2. 출력할 컬럼 리스트 구성 (Category_Type 포함)
+        # 시트에 있는 실제 컬럼명과 일치하는지 확인하며 구성합니다.
+        base_cols = ['Category_Type', 'Process_Step', 'Work_Week_Start', 'Work_Week_End']
+        show_cols = [c for c in base_cols if c in crop_schedule.columns]
         
-        # 총 노동 시간 계산
-        total_h = crop_schedule[f'Auto_{auto_level}_ManHour_per_sqm'].sum() * size_sqm
-        st.warning(f"⚠️ {auto_label} 적용 시, 연간 총 예상 노동시간: **{total_h:,.1f} Man-Hour**")
+        # 장비 컬럼 추가 (2번째 위치)
+        if equip_col in crop_schedule.columns:
+            show_cols.insert(1, equip_col)
+        
+        # 노동시간 컬럼 추가
+        if mh_col in crop_schedule.columns:
+            show_cols.append(mh_col)
+        
+        # 3. 데이터프레임 출력
+        st.dataframe(crop_schedule[show_cols], use_container_width=True, hide_index=True)
+        
+        # 4. 총 노동 시간 계산 (데이터가 있는 경우에만)
+        if mh_col in crop_schedule.columns:
+            total_h = crop_schedule[mh_col].sum() * size_sqm
+            st.warning(f"⚠️ {auto_label} 적용 시, 연간 총 예상 노동시간: **{total_h:,.1f} Man-Hour**")
+        
     else:
-        st.error("해당 작물의 공정(Process) 데이터가 없습니다. 시트를 확인해주세요.")
+        st.error(f"'{selected_crop}'의 공정(Process) 데이터가 없습니다. 시트의 Crop_Name 일치 여부를 확인해주세요.")
 
 # --- Tab 3: 투입 장비 상세 ---
 with tab3:
