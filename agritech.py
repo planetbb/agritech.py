@@ -94,19 +94,51 @@ with tab1:
 
     df_compare = pd.DataFrame(comparison_data)
 
-    # 2. 상단 그래프
+    # 2. 그래프 시각화 (ValueError 방지를 위해 설정 최적화)
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=df_compare['Level'], y=df_compare['Total_ManHour'], name='Man-Hours', marker_color='#5dade2', yaxis='y1'))
-    fig.add_trace(go.Scatter(x=df_compare['Level'], y=df_compare['Total_CAPEX'], name='Investment ($)', line=dict(color='#e74c3c', width=4), yaxis='y2'))
+    
+    # 노동 시간 바 차트
+    fig.add_trace(go.Bar(
+        x=df_compare['Level'], 
+        y=df_compare['Total_ManHour'], 
+        name='Man-Hours', 
+        marker_color='#5dade2', 
+        yaxis='y1'
+    ))
+    
+    # 투자비 라인 차트
+    fig.add_trace(go.Scatter(
+        x=df_compare['Level'], 
+        y=df_compare['Total_CAPEX'], 
+        name='Investment ($)', 
+        line=dict(color='#e74c3c', width=4), 
+        yaxis='y2'
+    ))
+
+    # 레이아웃 설정 (ValueError 해결을 위해 폰트 설정 구조 단순화)
     fig.update_layout(
-        yaxis=dict(title="Man-Hours", side="left", titlefont=dict(color="#5dade2"), tickfont=dict(color="#5dade2")), 
-        yaxis2=dict(title="Investment ($)", overlaying="y", side="right", showgrid=False, titlefont=dict(color="#e74c3c"), tickfont=dict(color="#e74c3c")),
-        legend=dict(orientation="h", y=1.1),
-        margin=dict(l=0, r=0, t=30, b=0)
+        xaxis=dict(title="Automation Level"),
+        yaxis=dict(
+            title="Man-Hours", 
+            side="left", 
+            title_font=dict(color="#5dade2"), 
+            tickfont=dict(color="#5dade2")
+        ), 
+        yaxis2=dict(
+            title="Investment ($)", 
+            overlaying="y", 
+            side="right", 
+            showgrid=False, 
+            title_font=dict(color="#e74c3c"), 
+            tickfont=dict(color="#e74c3c")
+        ),
+        legend=dict(orientation="h", x=0.5, xanchor="center", y=1.15),
+        margin=dict(l=50, r=50, t=50, b=50),
+        hovermode="x unified"
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # 3. 상세 분석 카드 레이아웃 (가로 배치 & 검정 글씨 강화)
+    # 3. 상세 분석 카드 레이아웃 (검정 글씨 가독성 극대화)
     st.markdown("---")
     st.subheader("📋 자동화 수준별 상세 비교")
     
@@ -116,12 +148,10 @@ with tab1:
         data = df_compare.iloc[i]
         is_selected = (label == automation_level)
         
-        # 선택 여부에 따른 스타일 설정
-        # 선택 시: 연한 하늘색 배경(#F0F8FF), 미세한 파란 테두리
-        # 미선택 시: 흰색 배경, 회색 테두리
-        bg_color = "#F0F8FF" if is_selected else "#FFFFFF"
-        border_color = "#3498DB" if is_selected else "#E0E0E0"
-        shadow = "3px 3px 10px rgba(0,0,0,0.1)" if is_selected else "none"
+        # 가독성을 위해 선택 시 연한 회색 배경(#F8F9FA)과 파란색 강조 테두리 사용
+        bg_color = "#F0F7FF" if is_selected else "#FFFFFF"
+        border_color = "#2E86C1" if is_selected else "#D5D8DC"
+        box_shadow = "4px 4px 15px rgba(0,0,0,0.1)" if is_selected else "none"
         
         with cols[i]:
             st.markdown(f"""
@@ -129,35 +159,33 @@ with tab1:
                     background-color: {bg_color}; 
                     border: 2px solid {border_color}; 
                     padding: 20px; 
-                    border-radius: 12px;
-                    height: 280px;
-                    box-shadow: {shadow};
+                    border-radius: 15px;
+                    min-height: 280px;
+                    box-shadow: {box_shadow};
                     color: #000000;
-                    font-family: sans-serif;
                 ">
-                    <h3 style="margin-top:0; color:#1A1A1A; font-weight: 800; border-bottom: 2px solid {border_color}; padding-bottom: 10px;">
-                        {label} {"✅" if is_selected else ""}
+                    <h3 style="margin-top:0; color:#000000; font-weight: 900; border-bottom: 2px solid {border_color}; padding-bottom: 10px; display: flex; justify-content: space-between;">
+                        <span>{label}</span>
+                        <span>{"✅" if is_selected else ""}</span>
                     </h3>
-                    <div style="margin-top: 15px;">
-                        <p style="margin: 5px 0; font-size: 1.05em;">⏱️ <b>노동 시간:</b> <span style="color:#2980B9;">{data['Total_ManHour']:,.1f} hr</span></p>
-                        <p style="margin: 5px 0; font-size: 1.05em;">💰 <b>설비 투자비:</b> <span style="color:#C0392B;">$ {data['Total_CAPEX']:,.0f}</span></p>
+                    <div style="margin-top: 20px;">
+                        <div style="margin-bottom: 10px;">
+                            <span style="font-size: 0.9em; font-weight: bold; color: #555;">⏱️ 연간 노동 시간</span><br>
+                            <span style="font-size: 1.4em; font-weight: 800; color: #000000;">{data['Total_ManHour']:,.1f} <small>hr</small></span>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <span style="font-size: 0.9em; font-weight: bold; color: #555;">💰 총 설비 투자비</span><br>
+                            <span style="font-size: 1.4em; font-weight: 800; color: #000000;">$ {data['Total_CAPEX']:,.0f}</span>
+                        </div>
                     </div>
-                    <div style="margin-top: 15px; background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px;">
-                        <p style="font-size: 0.85em; color: #333333; margin: 0;">
-                            <b>🚜 주요 투입 장비:</b><br>
+                    <div style="background: rgba(0,0,0,0.03); padding: 10px; border-radius: 8px; border-left: 4px solid {border_color};">
+                        <p style="font-size: 0.85em; color: #000000; margin: 0; line-height: 1.4;">
+                            <b>🚜 투입 장비:</b><br>
                             {data['Equipment']}
                         </p>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
-
-    # 4. 하단 성과 요약
-    if automation_level != "Manual":
-        m_mh = df_compare.iloc[0]['Total_ManHour']
-        curr_mh = df_compare[df_compare['Level'] == automation_level]['Total_ManHour'].values[0]
-        if m_mh > 0:
-            reduction = (1 - curr_mh / m_mh) * 100
-            st.success(f"✅ **성공적인 자동화:** {automation_level} 도입 시 수동 대비 **{reduction:.1f}%**의 노동 시간을 절약할 수 있습니다.")
 
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
