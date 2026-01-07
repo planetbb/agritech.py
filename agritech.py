@@ -63,29 +63,21 @@ crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
 with tab1:
     import plotly.graph_objects as go
 
-    # 0. 작물 마스터 데이터 기반 기본 수익 지표 계산
-    # df_crop에서 선택된 작물의 데이터 추출
+    # 0. 기초 수익 지표 계산
     crop_info = df_crop[df_crop['Crop_Name'] == selected_crop].iloc[0]
-    
-    # 계산 로직: 면적 * 단위 수확량 / 면적 * 단위 수확량 * 판매 단가
     total_yield_kg = size_sqm * crop_info['Yield_Per_sqm_kg']
     total_revenue_usd = total_yield_kg * crop_info['Avg_Price_Per_kg_USD']
 
-    st.header(f"📊 {selected_crop} 생산 및 수익성 분석")
-    
-    # 상단 요약 지표 (수확량, 매출) - 한 줄로 표시
+    # 1. 상단 요약 지표 (공간 절약을 위해 높이 조절)
+    st.markdown(f"### 📊 {selected_crop} 분석 리포트")
     m1, m2, m3 = st.columns(3)
-    with m1:
-        st.metric("🌾 예상 연간 수확량", f"{total_yield_kg:,.1f} kg", help="면적 * 단위 면적당 수확량")
-    with m2:
-        st.metric("💰 예상 연간 매출액", f"$ {total_revenue_usd:,.0f}", help="총 수확량 * 평균 판매 단가")
-    with m3:
-        st.metric("📍 설정 면적", f"{size_sqm:,.0f} sqm")
+    m1.metric("🌾 예상 수확량", f"{total_yield_kg:,.1f} kg")
+    m2.metric("💰 예상 매출액", f"$ {total_revenue_usd:,.0f}")
+    m3.metric("📍 설정 면적", f"{size_sqm:,.0f} sqm")
 
     st.markdown("---")
-    st.subheader("📈 자동화 레벨별 효율성 비교")
 
-    # 1. 데이터 계산부 (기존 로직 유지)
+    # 2. 데이터 미리 계산
     comparison_data = []
     crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
     levels = ["Manual", "Semi-Auto", "Full-Auto"]
@@ -93,7 +85,6 @@ with tab1:
     for i, label in enumerate(levels):
         level_num = i + 1
         mh_col, eq_col = f'Auto_{level_num}_ManHour_per_sqm', f'Auto_{level_num}_Equipment'
-        
         total_mh = crop_schedule[mh_col].sum() * size_sqm if mh_col in crop_schedule.columns else 0
         
         total_capex = 0
@@ -105,64 +96,54 @@ with tab1:
                 prices = pd.to_numeric(df_equip[df_equip['Item_Name'].isin(used_equips)]['Unit_Price_USD'], errors='coerce')
                 total_capex = prices.sum()
         
-        comparison_data.append({
-            "Level": label,
-            "Total_ManHour": total_mh,
-            "Total_CAPEX": total_capex,
-            "Equipment": ", ".join(used_equips) if used_equips else "N/A"
-        })
-
+        comparison_data.append({"Level": label, "Total_ManHour": total_mh, "Total_CAPEX": total_capex, "Equipment": ", ".join(used_equips) if used_equips else "N/A"})
     df_compare = pd.DataFrame(comparison_data)
 
-    # 2. 그래프 시각화
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=df_compare['Level'], y=df_compare['Total_ManHour'], name='Man-Hours', marker_color='#5dade2', yaxis='y1'))
-    fig.add_trace(go.Scatter(x=df_compare['Level'], y=df_compare['Total_CAPEX'], name='Investment ($)', line=dict(color='#e74c3c', width=4), yaxis='y2'))
-    
-    fig.update_layout(
-        yaxis=dict(title="Man-Hours", side="left", title_font=dict(color="#5dade2"), tickfont=dict(color="#5dade2")), 
-        yaxis2=dict(title="Investment ($)", overlaying="y", side="right", showgrid=False, title_font=dict(color="#e74c3c"), tickfont=dict(color="#e74c3c")),
-        legend=dict(orientation="h", x=0.5, xanchor="center", y=1.15),
-        margin=dict(l=50, r=50, t=50, b=50)
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    # 3. [핵심] 그래프와 상세 카드를 좌우로 배치 (Ratio 1:1)
+    chart_col, info_col = st.columns([1, 1])
 
-    # 3. 상세 분석 카드 레이아웃 (좌우 디스플레이)
-    st.markdown("---")
-    st.subheader("📋 자동화 수준별 상세 비교")
-    
-    cols = st.columns(3)
-    for i, label in enumerate(levels):
-        data = df_compare.iloc[i]
-        is_selected = (label == automation_level)
-        bg_color = "#F0F7FF" if is_selected else "#FFFFFF"
-        border_color = "#2E86C1" if is_selected else "#D5D8DC"
-        box_shadow = "4px 4px 15px rgba(0,0,0,0.1)" if is_selected else "none"
-        
-        with cols[i]:
+    with chart_col:
+        st.write("#### 📈 효율성 비교 차트")
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=df_compare['Level'], y=df_compare['Total_ManHour'], name='Man-Hours', marker_color='#5dade2', yaxis='y1'))
+        fig.add_trace(go.Scatter(x=df_compare['Level'], y=df_compare['Total_CAPEX'], name='Investment', line=dict(color='#e74c3c', width=3), yaxis='y2'))
+        fig.update_layout(
+            height=350,  # 높이를 줄여 컴팩트하게
+            margin=dict(l=0, r=0, t=20, b=0),
+            legend=dict(orientation="h", y=1.2),
+            yaxis=dict(title="Hrs"),
+            yaxis2=dict(overlaying="y", side="right")
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with info_col:
+        st.write("#### 📋 레벨별 상세 요약")
+        # 카드 높이를 줄이고 텍스트 밀도를 높임
+        for i, label in enumerate(levels):
+            data = df_compare.iloc[i]
+            is_selected = (label == automation_level)
+            bg_color = "#F0F7FF" if is_selected else "#FFFFFF"
+            border_color = "#2E86C1" if is_selected else "#D5D8DC"
+            
             st.markdown(f"""
-                <div style="background-color: {bg_color}; border: 2px solid {border_color}; padding: 20px; border-radius: 15px; min-height: 280px; box-shadow: {box_shadow}; color: #000000;">
-                    <h3 style="margin-top:0; color:#000000; font-weight: 900; border-bottom: 2px solid {border_color}; padding-bottom: 10px; display: flex; justify-content: space-between;">
-                        <span>{label}</span>
-                        <span>{"✅" if is_selected else ""}</span>
-                    </h3>
-                    <div style="margin-top: 20px;">
-                        <div style="margin-bottom: 10px;">
-                            <span style="font-size: 0.9em; font-weight: bold; color: #555;">⏱️ 연간 노동 시간</span><br>
-                            <span style="font-size: 1.4em; font-weight: 800; color: #000000;">{data['Total_ManHour']:,.1f} <small>hr</small></span>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <span style="font-size: 0.9em; font-weight: bold; color: #555;">💰 총 설비 투자비</span><br>
-                            <span style="font-size: 1.4em; font-weight: 800; color: #000000;">$ {data['Total_CAPEX']:,.0f}</span>
-                        </div>
+                <div style="background-color: {bg_color}; border: 1px solid {border_color}; padding: 10px 15px; border-radius: 8px; margin-bottom: 8px; color: #000;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 900; font-size: 1.1em;">{label} {"✅" if is_selected else ""}</span>
+                        <span style="font-size: 0.85em; color: #555;">⏱️ {data['Total_ManHour']:,.1f} hr | 💰 $ {data['Total_CAPEX']:,.0f}</span>
                     </div>
-                    <div style="background: rgba(0,0,0,0.03); padding: 10px; border-radius: 8px; border-left: 4px solid {border_color};">
-                        <p style="font-size: 0.85em; color: #000000; margin: 0; line-height: 1.4;">
-                            <b>🚜 투입 장비:</b><br>{data['Equipment']}
-                        </p>
+                    <div style="font-size: 0.75em; color: #333; margin-top: 5px; border-top: 0.5px solid #EEE; padding-top: 3px;">
+                        <b>🚜 장비:</b> {data['Equipment']}
                     </div>
                 </div>
             """, unsafe_allow_html=True)
+
+    # 4. 하단 성과 요약 (한 줄로 컴팩트하게)
+    if automation_level != "Manual":
+        m_mh = df_compare.iloc[0]['Total_ManHour']
+        curr_mh = df_compare[df_compare['Level'] == automation_level]['Total_ManHour'].values[0]
+        if m_mh > 0:
+            reduction = (1 - curr_mh / m_mh) * 100
+            st.info(f"💡 **{automation_level}** 도입 시 노동력 **{reduction:.1f}%** 절감 가능")
 
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
