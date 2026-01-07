@@ -65,41 +65,49 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 수익성 분석", "📅 작업 스케�
 # 선택된 작물의 상세 데이터 추출
 crop_data = df_crop[df_crop['Crop_Name'] == selected_crop].iloc[0]
 
-# --- 수익성 분석 섹션 (예: Tab 1) ---
+# --- 수익성 분석 섹션 (Tab 1) ---
 with tab1:
     st.header(f"📊 {selected_crop} 자동화 레벨별 비교 분석")
     
     # 데이터 준비: 각 레벨별 요약 정보 계산
     comparison_data = []
     
-    # 해당 작물의 공정 데이터만 먼저 필터링
+    # 1. 공정 데이터가 있는지 먼저 확인
     crop_schedule = df_process[df_process['Crop_Name'] == selected_crop]
     
     if not crop_schedule.empty:
+        # 1~3단계 루프 시작
         for level in [1, 2, 3]:
             label = ["Manual", "Semi-Auto", "Full-Auto"][level-1]
             mh_col = f'Auto_{level}_ManHour_per_sqm'
             eq_col = f'Auto_{level}_Equipment'
             
-            # 1. 총 노동 시간 계산 (컬럼 유무 확인 후 안전하게 계산)
+            # [노동시간 계산] 컬럼 유무 확인
             if mh_col in crop_schedule.columns:
                 total_mh = crop_schedule[mh_col].sum() * size_sqm
             else:
                 total_mh = 0
             
-            # 2. 투입 장비 투자비 계산
+            # [투자비 계산] 컬럼 및 가격 데이터 확인
             total_capex = 0
             if eq_col in crop_schedule.columns:
-                # 해당 레벨의 장비 리스트 추출 (결측치 제거)
                 used_equips = crop_schedule[eq_col].dropna().unique()
                 
-                # Manual(1단계)에서 장비가 비어있다면 Hand Tool Kit 적용
+                # Manual(1단계) 기본값 처리
                 if level == 1 and len(used_equips) == 0:
                     used_equips = ['Hand Tool Kit']
                 
-                # 장비 가격 합산 (df_equip에 해당 장비명이 있을 때만)
-                if not df_equip.empty and 'Item_Name' in df_equip.columns:
-                    total_capex = df_equip[df_equip['Item_Name'].isin(used_equips)]['Price'].sum()
+                # 장비 마스터(df_equip)에서 가격 합산
+                if not df_equip.empty:
+                    # 'Price' 컬럼이 있는지 확인 (에러 방지)
+                    p_col = 'Price' if 'Price' in df_equip.columns else None
+                    name_col = 'Item_Name' if 'Item_Name' in df_equip.columns else None
+                    
+                    if p_col and name_col:
+                        total_capex = df_equip[df_equip[name_col].isin(used_equips)][p_col].sum()
+                    else:
+                        # 컬럼명이 다를 경우를 대비한 디버깅 메시지
+                        st.error(f"시트 컬럼명을 확인해주세요. 현재 장비 시트 컬럼: {df_equip.columns.tolist()}")
             
             comparison_data.append({
                 "Level": label,
@@ -113,7 +121,7 @@ with tab1:
         # --- 시각화 1: 노동 시간 vs 투자 비용 (이중 축 차트) ---
         fig = go.Figure()
 
-        # 노동 시간 (Bar)
+        # 노동 시간 (Bar) - 왼쪽 축
         fig.add_trace(go.Bar(
             x=df_compare['Level'],
             y=df_compare['Total_ManHour'],
@@ -122,7 +130,7 @@ with tab1:
             yaxis='y1'
         ))
 
-        # 투자 비용 (Line)
+        # 투자 비용 (Line) - 오른쪽 축
         fig.add_trace(go.Scatter(
             x=df_compare['Level'],
             y=df_compare['Total_CAPEX'],
@@ -134,10 +142,10 @@ with tab1:
         fig.update_layout(
             title=f"Efficiency vs Investment: {selected_crop}",
             xaxis=dict(title="Automation Level"),
-            yaxis=dict(title="Man-Hours", side="left", showgrid=True),
+            yaxis=dict(title="Man-Hours", side="left"),
             yaxis2=dict(title="Investment ($)", side="right", overlaying="y", showgrid=False),
             legend=dict(x=0.01, y=1.15, orientation="h"),
-            margin=dict(l=40, r=40, t=80, b=40)
+            margin=dict(l=50, r=50, t=100, b=50)
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -147,15 +155,15 @@ with tab1:
         with c1:
             st.metric("Manual 노동량", f"{df_compare.iloc[0]['Total_ManHour']:,.0f} hr")
         with c2:
-            # 분모가 0이 되는 경우 방지
             m_val = df_compare.iloc[0]['Total_ManHour']
             f_val = df_compare.iloc[2]['Total_ManHour']
             reduction = (1 - f_val / m_val) * 100 if m_val > 0 else 0
             st.metric("Full-Auto 전환 시 노동 절감률", f"{reduction:.1f}%", delta=f"-{reduction:.1f}%")
         with c3:
             st.metric("Full-Auto 투자비", f"${df_compare.iloc[2]['Total_CAPEX']:,.0f}")
+            
     else:
-        st.error(f"'{selected_crop}'에 대한 공정 데이터가 없습니다. 시트를 확인해주세요.")
+        st.warning(f"'{selected_crop}'에 대한 공정 데이터가 부족합니다. 시트를 업데이트 해주세요.")
         
 # --- Tab 2: 작업 스케줄 (FarmScheduler) ---
 with tab2:
