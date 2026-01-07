@@ -98,85 +98,64 @@ with tab1:
     m2.metric("💰 예상 매출액", f"$ {total_rev:,.0f}")
     m3.metric("📍 설정 면적", f"{size_sqm:,.0f} sqm")
     
+    st.markdown("---")
+    
+    # 좌우 기둥 레이아웃 설정
     l_col, r_col = st.columns([1, 1])
-with l_col:
-        # --- 1. 커스텀 범례 (박스 형태) ---
-        # HTML을 사용하여 차트 바로 위에 범례 박스를 생성합니다.
+    
+    # --- 왼쪽 기둥 (그래프) ---
+    with l_col:
+        st.write("#### 📈 효율성 비교 차트")
+        # 중앙 상단 커스텀 범례
         st.markdown("""
-            <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 10px;">
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 12px; background-color: #D3D3D3; border: 1px solid #999; margin-right: 8px;"></div>
-                    <span style="font-size: 0.9em; font-weight: bold;">Labor Hrs (노동시간)</span>
-                </div>
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 20px; height: 3px; background-color: #e74c3c; margin-right: 8px;"></div>
-                    <span style="font-size: 0.9em; font-weight: bold;">CAPEX (설비투자비)</span>
-                </div>
-                <div style="display: flex; align-items: center;">
-                    <div style="width: 12px; height: 12px; background-color: #FFD700; border: 1px solid #FBC02D; margin-right: 8px;"></div>
-                    <span style="font-size: 0.9em; font-weight: bold;">선택된 레벨</span>
-                </div>
+            <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center;"><div style="width: 15px; height: 10px; background-color: #D3D3D3; margin-right: 5px;"></div><span style="font-size: 0.8em; font-weight:bold;">Labor Hrs</span></div>
+                <div style="display: flex; align-items: center;"><div style="width: 15px; height: 3px; background-color: #e74c3c; margin-right: 5px;"></div><span style="font-size: 0.8em; font-weight:bold;">CAPEX</span></div>
+                <div style="display: flex; align-items: center;"><div style="width: 10px; height: 10px; background-color: #FFD700; margin-right: 5px;"></div><span style="font-size: 0.8em; font-weight:bold;">Selected</span></div>
             </div>
         """, unsafe_allow_html=True)
 
-        # --- 2. Plotly 차트 생성 ---
         fig = go.Figure()
-        
-        # 막대 그래프 (노동시간)
         fig.add_trace(go.Bar(
             x=df_comp['Level'], 
             y=df_comp['MH'], 
-            name='Labor Hrs', 
             marker_color=['#FFD700' if l == automation_level else '#D3D3D3' for l in df_comp['Level']], 
-            yaxis='y1',
-            hovertemplate='%{y:,.1f} 시간'
+            yaxis='y1'
         ))
-        
-        # 선 그래프 (투자비)
         fig.add_trace(go.Scatter(
             x=df_comp['Level'], 
             y=df_comp['CAPEX'], 
-            name='CAPEX', 
-            line=dict(color='#e74c3c', width=4), 
-            mode='lines+markers+text',
-            yaxis='y2',
-            hovertemplate='$ %{y:,.0f}'
+            line=dict(color='#e74c3c', width=3), 
+            mode='lines+markers', 
+            yaxis='y2'
         ))
-        
         fig.update_layout(
-            height=450,
-            # 기본 범례는 숨기고 커스텀 HTML 범례 사용
-            showlegend=False,
-            margin=dict(l=0, r=0, t=10, b=0),
-            hovermode="x unified",
-            yaxis=dict(
-                title="<b>Man-Hours (h)</b>",
-                titlefont=dict(color="#666"),
-                tickfont=dict(color="#666")
-            ),
-            yaxis2=dict(
-                title="<b>CAPEX ($)</b>",
-                titlefont=dict(color="#e74c3c"),
-                tickfont=dict(color="#e74c3c"),
-                overlaying="y",
-                side="right",
-                showgrid=False
-            ),
-            xaxis=dict(tickfont=dict(size=13, font_weight='bold'))
+            height=400, showlegend=False, margin=dict(l=0,r=0,t=10,b=0),
+            yaxis=dict(title="Man-Hours"),
+            yaxis2=dict(title="CAPEX ($)", overlaying="y", side="right", showgrid=False)
         )
         st.plotly_chart(fig, use_container_width=True)
 
+    # --- 오른쪽 기둥 (인사이트) ---
     with r_col:
+        st.write("#### 📋 레벨별 요약 및 인사이트")
         for _, r in df_comp.iterrows():
             sel = (r['Level'] == automation_level)
-            st.markdown(f"""<div style="border: 2px solid {'#FBC02D' if sel else '#DDD'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; background-color: {'#FFF9C4' if sel else '#FFF'}; color: #000;">
-                <div style="display: flex; justify-content: space-between;"><b>{r['Level']}</b> <span>⏱️ {r['MH']:,.1f}h | 💰 ${r['CAPEX']:,.0f}</span></div>
-                </div>""", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div style="border: 2px solid {'#FBC02D' if sel else '#DDD'}; padding: 10px; border-radius: 8px; margin-bottom: 6px; background-color: {'#FFF9C4' if sel else '#FFF'}; color: #000;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <b>{r['Level']} {"⭐" if sel else ""}</b> 
+                        <span>⏱️ {r['MH']:,.1f}h | 💰 ${r['CAPEX']:,.0f}</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
         
         if automation_level != "Manual":
-            reduction = (1 - df_comp.loc[auto_level_idx-1, 'MH'] / df_comp.iloc[0]['MH']) * 100
-            extra = df_comp.loc[auto_level_idx-1, 'CAPEX'] - df_comp.iloc[0]['CAPEX']
-            st.success(f"💡 **성과:** 수동 대비 노동 시간 **{reduction:.1f}% 절감**, 투자비 **$ {extra:,.0f} 추가**")
+            current_row = df_comp[df_comp['Level'] == automation_level].iloc[0]
+            manual_row = df_comp.iloc[0]
+            reduction = (1 - current_row['MH'] / manual_row['MH']) * 100 if manual_row['MH'] > 0 else 0
+            extra = current_row['CAPEX'] - manual_row['CAPEX']
+            st.info(f"💡 **분석 결과:** {automation_level} 적용 시 수동 대비 노동 시간 **{reduction:.1f}% 절감**, 설비 투자비 **$ {extra:,.0f} 추가**가 예상됩니다.")
 
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
