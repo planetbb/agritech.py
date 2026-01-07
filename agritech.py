@@ -228,19 +228,26 @@ with tab4:
         st.write("#### 🚜 Equipment & Facility Data")
         st.dataframe(df_equip, use_container_width=True, hide_index=True)
 
-# --- [수정] 페이지 하단 푸터 (우측 정렬 버전) ---
+# --- 페이지 하단 푸터 (우측 정렬 & 한 줄 버전) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.divider()
 
-# 우측 정렬을 위해 왼쪽 컬럼을 비우고 오른쪽 컬럼에 내용을 배치
-f_empty, f_content = st.columns([1, 2])
+current_date = datetime.now().strftime("%Y-%m-%d")
 
-with f_content:
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    st.markdown(f"""
-        <div style="text-align: right; color: #7f8c8d; line-height: 1.6;">
-            <p style="margin: 0; font-weight: bold;">Copyright 2024. Jinux. All rights reserved.</p>
-            <p style="margin: 0; font-size: 0.9em;">Designed for AgriTech Efficiency Analysis</p>
-            <p style="margin: 0; font-size: 0.9em;">📅 최신 업데이트: {current_date} | 📧 Contact: <a href="mailto:JinuxDreams@gmail.com" style="color: #7f8c8d; text-decoration: none;">JinuxDreams@gmail.com</a></p>
-        </div>
+# HTML/CSS를 사용하여 한 줄로 우측 정렬
+st.markdown(f"""
+    <div style="text-align: right; color: #7f8c8d; font-size: 0.85em; letter-spacing: -0.5px;">
+        <b>Copyright 2024. Jinux. All rights reserved.</b> 
+        <span style="margin: 0 10px;">|</span> Designed for AgriTech Efficiency Analysis 
+        <span style="margin: 0 10px;">|</span> 📅 최신 업데이트: {current_date} 
+        <span style="margin: 0 10px;">|</span> 📧 Contact: <a href="mailto:JinuxDreams@gmail.com" style="color: #7f8c8d; text-decoration: none; font-weight: bold;">JinuxDreams@gmail.com</a>
+    </div>
+""", unsafe_allow_html=True)
+
+# 하단 공백 제거를 위한 스타일링
+st.markdown("""
+    <style>
+    footer {visibility: hidden;}
+    [data-testid="stVerticalBlock"] {gap: 0rem;}
+    </style>
     """, unsafe_allow_html=True)
