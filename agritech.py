@@ -81,13 +81,13 @@ if display_process_df.empty:
 # 탭 구성
 tab1, tab2, tab3, tab4 = st.tabs(["📊 수익성 분석", "📅 작업 스케줄", "🚜 투입 장비", "🗂️ 마스터 데이터"])
 
-# --- Tab 1: 수익성 분석 (인사이트 로직 복구 버전) ---
+# --- Tab 1: 수익성 분석 (시각적 강조 강화 버전) ---
 with tab1:
     total_yield = size_sqm * crop_info['Yield_Per_sqm_kg']
     total_rev = total_yield * crop_info['Avg_Price_Per_kg_USD']
     st.markdown(f"### 📊 {selected_crop} 분석 리포트")
     
-    # 상단 지표
+    # 상단 요약 지표
     m1, m2, m3 = st.columns(3)
     m1.metric("🌾 예상 수확량", f"{total_yield:,.1f} kg")
     m2.metric("💰 예상 매출액", f"$ {total_rev:,.0f}")
@@ -106,46 +106,76 @@ with tab1:
     
     df_comp = pd.DataFrame(comp_data)
     
+    # --- 그래프 색상 동적 설정 ---
+    # 선택된 레벨은 노란색(#FFD700), 나머지는 회색(#D3D3D3)
+    colors = ['#FFD700' if lvl == automation_level else '#D3D3D3' for lvl in df_comp['Level']]
+
     # 차트와 카드 레이아웃
     c1, c2 = st.columns([1, 1])
     with c1:
+        st.write("#### 📈 효율성 비교 (선택 항목 강조)")
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=df_comp['Level'], y=df_comp['MH'], name='Hrs', marker_color='#5dade2', yaxis='y1'))
-        fig.add_trace(go.Scatter(x=df_comp['Level'], y=df_comp['CAPEX'], name='CAPEX', line=dict(color='#e74c3c', width=3), yaxis='y2'))
-        fig.update_layout(height=350, margin=dict(l=0,r=0,t=20,b=0), yaxis2=dict(overlaying="y", side="right", showgrid=False))
+        # 막대 그래프 (색상 적용)
+        fig.add_trace(go.Bar(
+            x=df_comp['Level'], 
+            y=df_comp['MH'], 
+            name='Labor Hrs', 
+            marker_color=colors,  # 동적 색상 적용
+            yaxis='y1'
+        ))
+        # 투자금 꺾은선
+        fig.add_trace(go.Scatter(
+            x=df_comp['Level'], 
+            y=df_comp['CAPEX'], 
+            name='Investment ($)', 
+            line=dict(color='#e74c3c', width=3), 
+            yaxis='y2'
+        ))
+        fig.update_layout(
+            height=350, 
+            margin=dict(l=0,r=0,t=20,b=0), 
+            yaxis=dict(title="Man-Hours"),
+            yaxis2=dict(title="CAPEX ($)", overlaying="y", side="right", showgrid=False),
+            legend=dict(orientation="h", y=1.2)
+        )
         st.plotly_chart(fig, use_container_width=True)
-    with c2:
-        for _, r in df_comp.iterrows():
-            sel = (r['Level'] == automation_level)
-            st.markdown(f"""<div style="border: 1px solid {'#2E86C1' if sel else '#DDD'}; padding: 10px; border-radius: 5px; margin-bottom: 5px; background: {'#F0F7FF' if sel else '#FFF'}; color: #000;">
-            <b>{r['Level']}</b> | ⏱️ {r['MH']:,.1f}h | 💰 ${r['CAPEX']:,.0f}<br><small>🚜 {r['EQ']}</small></div>""", unsafe_allow_html=True)
 
-    # ==========================================
-    # 🚀 복구된 성과 분석 인사이트 (수익성 분석 하단)
-    # ==========================================
+    with c2:
+        st.write("#### 📋 레벨별 상세 요약")
+        for _, r in df_comp.iterrows():
+            # 선택 여부에 따른 배경색 및 테두리 설정
+            sel = (r['Level'] == automation_level)
+            # 선택 시 배경색 노란색(#FFF9C4), 테두리 진한 노란색(#FBC02D)
+            bg_color = "#FFF9C4" if sel else "#FFFFFF"
+            border_color = "#FBC02D" if sel else "#DDD"
+            
+            st.markdown(f"""
+                <div style="border: 2px solid {border_color}; padding: 12px; border-radius: 8px; margin-bottom: 8px; background-color: {bg_color}; color: #000;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-weight: 900; font-size: 1.1em;">{r['Level']} {"⭐" if sel else ""}</span>
+                        <span style="font-weight: 700;">⏱️ {r['MH']:,.1f}h | 💰 ${r['CAPEX']:,.0f}</span>
+                    </div>
+                    <div style="font-size: 0.8em; color: #444; margin-top: 6px; border-top: 1px dashed #CCC; padding-top: 4px;">
+                        <b>🚜 장비:</b> {r['EQ']}
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # 성과 분석 인사이트 (하단)
     st.markdown("---")
     if automation_level != "Manual":
-        # 수동(Manual) 대비 현재 선택된 레벨 비교
         manual_data = df_comp.iloc[0]
         current_data = df_comp[df_comp['Level'] == automation_level].iloc[0]
-        
-        m_mh = manual_data['MH']
-        c_mh = current_data['MH']
+        reduction_pct = (1 - current_data['MH'] / manual_data['MH']) * 100 if manual_data['MH'] > 0 else 0
         extra_capex = current_data['CAPEX'] - manual_data['CAPEX']
         
-        if m_mh > 0:
-            reduction_pct = (1 - c_mh / m_mh) * 100
-            saved_hours = m_mh - c_mh
-            
-            st.success(f"### 💡 {automation_level} 도입 성과 분석")
-            col_a, col_b = st.columns(2)
-            col_a.info(f"**⏱️ 노동시간 변화**\n\n수동 대비 **{reduction_pct:.1f}%** 절감\n(연간 {saved_hours:,.1f} 시간 단축)")
-            col_b.warning(f"**💰 설비투자금 변화**\n\n수동 대비 **$ {extra_capex:,.0f}** 추가 투자\n(초기 자본 지출 증가)")
-            
-            st.caption(f"※ 위 분석은 {source_name}의 공정 데이터를 기반으로 산출되었습니다.")
+        st.success(f"### 💡 {automation_level} 도입 성과 분석")
+        col_a, col_b = st.columns(2)
+        col_a.info(f"**⏱️ 노동시간 변화**\n\n수동 대비 **{reduction_pct:.1f}%** 절감")
+        col_b.warning(f"**💰 설비투자금 변화**\n\n수동 대비 **$ {extra_capex:,.0f}** 추가")
     else:
-        
-        st.info("💡 **Manual 모드 사용 중:** 상단 차트를 확인하여 Semi-Auto 또는 Full-Auto 도입 시의 노동 절감 효과를 확인해 보세요.")
+        st.info("💡 **Manual 모드:** 상단 차트에서 자동화 시의 노동 절감 폭을 확인해 보세요.")
+
 # --- Tab 2: 작업 스케줄 ---
 with tab2:
     st.subheader(f"📅 {selected_crop} 작업 프로세스")
