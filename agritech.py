@@ -99,11 +99,71 @@ with tab1:
     m3.metric("📍 설정 면적", f"{size_sqm:,.0f} sqm")
     
     l_col, r_col = st.columns([1, 1])
-    with l_col:
+with l_col:
+        # --- 1. 커스텀 범례 (박스 형태) ---
+        # HTML을 사용하여 차트 바로 위에 범례 박스를 생성합니다.
+        st.markdown("""
+            <div style="display: flex; justify-content: center; gap: 20px; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 12px; background-color: #D3D3D3; border: 1px solid #999; margin-right: 8px;"></div>
+                    <span style="font-size: 0.9em; font-weight: bold;">Labor Hrs (노동시간)</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 3px; background-color: #e74c3c; margin-right: 8px;"></div>
+                    <span style="font-size: 0.9em; font-weight: bold;">CAPEX (설비투자비)</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 12px; height: 12px; background-color: #FFD700; border: 1px solid #FBC02D; margin-right: 8px;"></div>
+                    <span style="font-size: 0.9em; font-weight: bold;">선택된 레벨</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # --- 2. Plotly 차트 생성 ---
         fig = go.Figure()
-        fig.add_trace(go.Bar(x=df_comp['Level'], y=df_comp['MH'], name='Labor Hrs', marker_color=['#FFD700' if l == automation_level else '#D3D3D3' for l in df_comp['Level']], yaxis='y1'))
-        fig.add_trace(go.Scatter(x=df_comp['Level'], y=df_comp['CAPEX'], name='CAPEX', line=dict(color='#e74c3c', width=3), yaxis='y2'))
-        fig.update_layout(height=400, yaxis=dict(title="Man-Hours"), yaxis2=dict(title="CAPEX ($)", overlaying="y", side="right", showgrid=False), margin=dict(l=0,r=0,t=30,b=0))
+        
+        # 막대 그래프 (노동시간)
+        fig.add_trace(go.Bar(
+            x=df_comp['Level'], 
+            y=df_comp['MH'], 
+            name='Labor Hrs', 
+            marker_color=['#FFD700' if l == automation_level else '#D3D3D3' for l in df_comp['Level']], 
+            yaxis='y1',
+            hovertemplate='%{y:,.1f} 시간'
+        ))
+        
+        # 선 그래프 (투자비)
+        fig.add_trace(go.Scatter(
+            x=df_comp['Level'], 
+            y=df_comp['CAPEX'], 
+            name='CAPEX', 
+            line=dict(color='#e74c3c', width=4), 
+            mode='lines+markers+text',
+            yaxis='y2',
+            hovertemplate='$ %{y:,.0f}'
+        ))
+        
+        fig.update_layout(
+            height=450,
+            # 기본 범례는 숨기고 커스텀 HTML 범례 사용
+            showlegend=False,
+            margin=dict(l=0, r=0, t=10, b=0),
+            hovermode="x unified",
+            yaxis=dict(
+                title="<b>Man-Hours (h)</b>",
+                titlefont=dict(color="#666"),
+                tickfont=dict(color="#666")
+            ),
+            yaxis2=dict(
+                title="<b>CAPEX ($)</b>",
+                titlefont=dict(color="#e74c3c"),
+                tickfont=dict(color="#e74c3c"),
+                overlaying="y",
+                side="right",
+                showgrid=False
+            ),
+            xaxis=dict(tickfont=dict(size=13, font_weight='bold'))
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     with r_col:
