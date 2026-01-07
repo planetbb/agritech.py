@@ -99,37 +99,34 @@ if st.session_state.db_view:
 tab1, tab2, tab3 = st.tabs(["📊 수익성 분석", "📅 작업 스케줄", "🚜 투입 장비"])
 
 with tab1:
+    # 1. 수확량 및 매출 계산 (crop_info 사용)
     total_yield = size_sqm * crop_info['Yield_Per_sqm_kg']
     total_rev = total_yield * crop_info['Avg_Price_Per_kg_USD']
     
     comp_data = []
+    # 2. 3가지 자동화 레벨 루프
     for i, label in enumerate(["Manual", "Semi-Auto", "Full-Auto"]):
         num = i + 1
-        mh_val = display_process_df[f'Auto_{num}_ManHour_per_sqm'].sum() * size_sqm
-        eq_list = display_process_df[f'Auto_{num}_Equipment'].dropna().unique().tolist()
-        capex = df_equip[df_equip['Item_Name'].isin(eq_list)]['Unit_Price_USD'].sum()
+        mh_col = f'Auto_{num}_ManHour_per_sqm'
+        eq_col = f'Auto_{num}_Equipment' # 만약 시트 컬럼명이 다르면 여기서 에러 발생
+        
+        # 인건비 계산 (컬럼이 있을 때만 계산)
+        mh_val = display_process_df[mh_col].sum() * size_sqm if mh_col in display_process_df.columns else 0
+        
+        # [중요] 장비 비용 계산 시 KeyError 방지 로직
+        if eq_col in display_process_df.columns:
+            eq_list = display_process_df[eq_col].dropna().unique().tolist()
+            # 장비 마스터 데이터에서 가격 합산
+            capex = df_equip[df_equip['Item_Name'].isin(eq_list)]['Unit_Price_USD'].sum()
+        else:
+            # 컬럼명이 정확히 일치하지 않을 경우 0으로 처리 (에러 방지)
+            eq_list = []
+            capex = 0
+            
         comp_data.append({"Level": label, "MH": mh_val, "CAPEX": capex})
-    df_comp = pd.DataFrame(comp_data)
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("🌾 예상 수확량", f"{total_yield:,.1f} kg")
-    m2.metric("💰 예상 매출액", f"$ {total_rev:,.0f}")
-    m3.metric("📍 설정 면적", f"{size_sqm:,.0f} sqm")
-
-    l_col, r_col = st.columns([1, 1])
-    with l_col:
-        st.markdown('<div style="display:flex; justify-content:center; gap:15px; font-size:0.8em; font-weight:bold;"><span style="color:#D3D3D3;">■ Labor</span> <span style="color:#e74c3c;">— CAPEX</span> <span style="color:#FFD700;">■ Selected</span></div>', unsafe_allow_html=True)
-        fig = go.Figure()
-        fig.add_trace(go.Bar(x=df_comp['Level'], y=df_comp['MH'], marker_color=['#FFD700' if l == automation_level else '#D3D3D3' for l in df_comp['Level']], yaxis='y1'))
-        fig.add_trace(go.Scatter(x=df_comp['Level'], y=df_comp['CAPEX'], line=dict(color='#e74c3c', width=3), yaxis='y2'))
-        fig.update_layout(height=350, showlegend=False, margin=dict(l=0,r=0,t=10,b=0), yaxis2=dict(overlaying="y", side="right", showgrid=False))
-        st.plotly_chart(fig, use_container_width=True)
     
-    with r_col:
-        for _, r in df_comp.iterrows():
-            sel = (r['Level'] == automation_level)
-            st.markdown(f"<div style='border:1px solid #ddd; padding:8px; border-radius:5px; margin-bottom:5px; background-color:{'#FFF9C4' if sel else '#FFF'}; color:#000;'><b>{r['Level']}</b>: {r['MH']:,.1f}h | ${r['CAPEX']:,.0f}</div>", unsafe_allow_html=True)
-
+    df_comp = pd.DataFrame(comp_data)
+    
 with tab2:
     st.dataframe(display_process_df[['Process_Step', 'Work_Week_Start', f'Auto_{auto_level_idx}_Equipment']], use_container_width=True)
 
